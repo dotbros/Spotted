@@ -16,8 +16,8 @@ import { io } from "socket.io-client";
 
 const { height } = Dimensions.get("window");
 
-// ⚠️ ZMIEŃ NA IP SWOJEGO KOMPUTERA W SIECI LOKALNEJ
-const API_URL = "http://83.168.71.159:4000";
+import { API_URL } from "./config";
+
 const socket = io(API_URL);
 
 export default function App() {
@@ -62,12 +62,25 @@ export default function App() {
   };
 
   const getLocation = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") return;
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        // fallback lokalizacja dev (Warszawa)
+        const fallback = { latitude: 52.2297, longitude: 21.0122 };
+        setLocation(fallback);
+        fetchPosts(fallback.latitude, fallback.longitude);
+        return;
+      }
 
-    const loc = await Location.getCurrentPositionAsync({});
-    setLocation(loc.coords);
-    fetchPosts(loc.coords.latitude, loc.coords.longitude);
+      const loc = await Location.getCurrentPositionAsync({});
+      setLocation(loc.coords);
+      fetchPosts(loc.coords.latitude, loc.coords.longitude);
+    } catch (error) {
+      // fallback lokalizacja dev jeśli emulator nie zwraca GPS
+      const fallback = { latitude: 52.2297, longitude: 21.0122 };
+      setLocation(fallback);
+      fetchPosts(fallback.latitude, fallback.longitude);
+    }
   };
 
   const fetchPosts = async (lat, lng) => {
