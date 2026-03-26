@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Spotted",
+    "slug": "spotted",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": ["android"],
+    "android": {
+      "package": "com.spotted.app",
+      "permissions": ["ACCESS_FINE_LOCATION"]
+    }
+  }
+}
