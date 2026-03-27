@@ -14,6 +14,8 @@ import {
   Modal,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
+import * as MediaLibrary from "expo-media-library";
 import { AuthContext } from "../context/AuthContext";
 
 const { width, height } = Dimensions.get("window");
@@ -48,27 +50,119 @@ export default function FeedScreen({ navigation }) {
     fetchPosts();
   }, []);
 
+  const [voteModalVisible, setVoteModalVisible] = useState(false);
+  const [voteType, setVoteType] = useState(null);
+  const [voteComment, setVoteComment] = useState("");
+  const [voteMedia, setVoteMedia] = useState(null);
+  const [voteMediaType, setVoteMediaType] = useState(null);
+
+  const [isOnPlace, setIsOnPlace] = useState(false);
+  const [willSendPhoto, setWillSendPhoto] = useState(false);
+  const [hasOtherProof, setHasOtherProof] = useState(false);
+
+  const [locationConfirmVisible, setLocationConfirmVisible] =
+    useState(false);
+  const [galleryVisible, setGalleryVisible] =
+    useState(false);
+  const [galleryPhotos, setGalleryPhotos] =
+    useState([]);
+
   const vote = async (type) => {
     if (!user) {
       navigation.navigate("Login");
       return;
     }
 
+    setVoteType(type);
+    setVoteModalVisible(true);
+  };
+
+  const loadGalleryPhotos = async () => {
+    const { status } =
+      await MediaLibrary.requestPermissionsAsync();
+
+    if (status !== "granted") return;
+
+    const media = await MediaLibrary.getAssetsAsync({
+      mediaType: "photo",
+      first: 20,
+      sortBy: [["creationTime", false]],
+    });
+
+    setGalleryPhotos(media.assets);
+  };
+
+  const openVoteCamera = async () => {
+    const permission =
+      await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) return;
+
+    const result =
+      await ImagePicker.launchCameraAsync({
+        mediaTypes:
+          ImagePicker.MediaTypeOptions.All,
+        quality: 0.8,
+        videoMaxDuration: 30,
+      });
+
+    if (!result.canceled) {
+      setVoteMedia(result.assets[0].uri);
+      setVoteMediaType(result.assets[0].type);
+    }
+  };
+
+  const submitVote = async () => {
     const post = posts[currentIndex];
     if (!post) return;
+
+    // 📍 Pobranie aktualnej lokalizacji
+    const { status } =
+      await Location.requestForegroundPermissionsAsync();
+
+    let lat = null;
+    let lng = null;
+
+    if (status === "granted") {
+      const location =
+        await Location.getCurrentPositionAsync({});
+      lat = location.coords.latitude;
+      lng = location.coords.longitude;
+    }
+
+    const formData = new FormData();
+    formData.append("post_id", post.id);
+    formData.append(
+      "value",
+      voteType === "true"
+    );
+    formData.append("comment", voteComment || "");
+
+    if (lat && lng) {
+      formData.append("lat", lat);
+      formData.append("lng", lng);
+    }
+
+    if (voteMedia) {
+      formData.append("media", {
+        uri: voteMedia,
+        name: "vote.jpg",
+        type: "image/jpeg",
+      });
+    }
 
     await fetch(`${API_URL}/vote`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        post_id: post.id,
-        value: type === "true",
-      }),
+      body: formData,
     });
 
+    setVoteModalVisible(false);
+    setVoteComment("");
+    setVoteMedia(null);
+    setVoteMediaType(null);
     fetchPosts();
   };
 
@@ -285,6 +379,253 @@ export default function FeedScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* MODAL GŁOSU (PÓŁ EKRANU) */}
+      <Modal
+        visible={voteModalVisible}
+        animationType="slide"
+        transparent
+      >
+        <View style={styles.voteOverlay}>
+          <View style={styles.voteContainer}>
+            <Text style={styles.voteTitle}>
+              Bądź bardziej wiarygodny wybierając opcje
+            </Text>
+
+            <View style={styles.proofButtonsWrapper}>
+              <TouchableOpacity
+                style={[
+                  styles.proofBtn,
+                  isOnPlace && styles.proofBtnActive,
+                ]}
+                onPress={() =>
+                  setLocationConfirmVisible(true)
+                }
+              >
+                <Text>Jestem na miejscu</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.proofBtn,
+                  willSendPhoto &&
+                    styles.proofBtnActive,
+                ]}
+                onPress={async () => {
+                  setWillSendPhoto(true);
+                  await loadGalleryPhotos();
+                  setGalleryVisible(true);
+                }}
+              >
+                <Text>Prześlę zdjęcie</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.proofBtn,
+                  hasOtherProof &&
+                    styles.proofBtnActive,
+                ]}
+                onPress={() =>
+                  setHasOtherProof((prev) => !prev)
+                }
+              >
+                <Text>Mam inny dowód</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              placeholder="Napisz komentarz..."
+              value={voteComment}
+              onChangeText={setVoteComment}
+              multiline
+              style={styles.voteInput}
+            />
+
+            {/* MAŁE IKONY */}
+            <View style={styles.iconRow}>
+              <TouchableOpacity
+                onPress={() =>
+                  setVoteMediaType("camera_panel")
+                }
+                style={styles.smallIconBtn}
+              >
+                <Text style={styles.smallIcon}>
+                  📷
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() =>
+                  setVoteMediaType("emoji_panel")
+                }
+                style={styles.smallIconBtn}
+              >
+                <Text style={styles.smallIcon}>
+                  😀
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* PANEL APARAT / GALERIA */}
+            {voteMediaType ===
+              "camera_panel" && (
+              <View style={styles.extraPanel}>
+                <View style={styles.tabRow}>
+                  <Text style={styles.tab}>
+                    Galeria
+                  </Text>
+                  <Text style={styles.tab}>
+                    Aparat
+                  </Text>
+                  <Text style={styles.tab}>
+                    Dokumenty
+                  </Text>
+                </View>
+
+                <View style={styles.galleryGrid}>
+                  <Text>
+                    (Miniatury galerii tutaj)
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* PANEL EMOJI */}
+            {voteMediaType ===
+              "emoji_panel" && (
+              <View style={styles.extraPanel}>
+                <View style={styles.tabRow}>
+                  <Text style={styles.tab}>
+                    😊
+                  </Text>
+                  <Text style={styles.tab}>
+                    😡
+                  </Text>
+                  <Text style={styles.tab}>
+                    👍
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.voteActions}>
+              <TouchableOpacity
+                onPress={submitVote}
+                style={styles.confirmBtn}
+              >
+                <Text style={{ color: "#fff" }}>
+                  Zatwierdź
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() =>
+                  setVoteModalVisible(false)
+                }
+                style={styles.cancelBtn}
+              >
+                <Text style={{ color: "#fff" }}>
+                  Anuluj
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL LOKALIZACJI */}
+      <Modal
+        visible={locationConfirmVisible}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.centerModalBox}>
+            <Text style={styles.locationTitle}>
+              Czy zgadzasz się udostępnić swoją lokalizację?
+            </Text>
+
+            <View style={styles.locationButtonsRow}>
+              <TouchableOpacity
+                style={styles.confirmSmallBtn}
+                onPress={() => {
+                  setIsOnPlace(true);
+                  setLocationConfirmVisible(false);
+                }}
+              >
+                <Text style={styles.locationBtnText}>
+                  TAK
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelSmallBtn}
+                onPress={() =>
+                  setLocationConfirmVisible(false)
+                }
+              >
+                <Text style={styles.locationBtnText}>
+                  NIE
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.locationInfoText}>
+              Twoja lokalizacja nie będzie widoczna publicznie.
+              Opcja ta zapewni większą rangę Twojej opinii.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL GALERII */}
+      <Modal
+        visible={galleryVisible}
+        animationType="slide"
+      >
+        <View style={{ flex: 1, padding: 15 }}>
+          <FlatList
+            data={galleryPhotos}
+            numColumns={3}
+            keyExtractor={(item) => item.id}
+            ListHeaderComponent={
+              <TouchableOpacity
+                style={styles.cameraTile}
+                onPress={openVoteCamera}
+              >
+                <Text style={{ fontSize: 28 }}>
+                  📷
+                </Text>
+              </TouchableOpacity>
+            }
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={() => {
+                  setVoteMedia(item.uri);
+                  setGalleryVisible(false);
+                }}
+              >
+                <Image
+                  source={{ uri: item.uri }}
+                  style={styles.galleryImage}
+                />
+              </TouchableOpacity>
+            )}
+          />
+
+          <TouchableOpacity
+            onPress={() =>
+              setGalleryVisible(false)
+            }
+            style={styles.closeGalleryBtn}
+          >
+            <Text style={{ color: "#fff" }}>
+              Zamknij
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       {/* MODAL DODAWANIA POSTA */}
       <Modal visible={modalVisible} animationType="slide">
         <View style={{ padding: 20 }}>
@@ -455,4 +796,192 @@ const styles = StyleSheet.create({
   },
 
   btnText: { color: "#fff", fontWeight: "bold" },
+
+  voteOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+
+  voteContainer: {
+    height: height * 0.55,
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+  },
+
+  voteTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 15,
+  },
+
+  voteInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 10,
+    height: 90,
+    marginBottom: 10,
+  },
+
+  iconRow: {
+    flexDirection: "row",
+    marginBottom: 10,
+  },
+
+  smallIconBtn: {
+    marginRight: 15,
+  },
+
+  smallIcon: {
+    fontSize: 22,
+  },
+
+  extraPanel: {
+    backgroundColor: "#f0f0f0",
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+
+  tabRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 10,
+  },
+
+  tab: {
+    fontWeight: "bold",
+  },
+
+  galleryGrid: {
+    height: 80,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  voteActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
+
+  confirmBtn: {
+    backgroundColor: "green",
+    padding: 12,
+    borderRadius: 8,
+    width: "48%",
+    alignItems: "center",
+  },
+
+  cancelBtn: {
+    backgroundColor: "red",
+    padding: 12,
+    borderRadius: 8,
+    width: "48%",
+    alignItems: "center",
+  },
+
+  proofButtonsWrapper: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 15,
+  },
+
+  proofBtn: {
+    flex: 1,
+    backgroundColor: "#fff",
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginHorizontal: 4,
+    alignItems: "center",
+  },
+
+  proofBtnActive: {
+    backgroundColor: "#cce5ff",
+  },
+
+  centerModalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+
+  centerModalBox: {
+    width: "85%",
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 12,
+  },
+
+  confirmSmallBtn: {
+    flex: 1,
+    backgroundColor: "green",
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginRight: 10,
+    alignItems: "center",
+  },
+
+  cancelSmallBtn: {
+    flex: 1,
+    backgroundColor: "red",
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginLeft: 10,
+    alignItems: "center",
+  },
+
+  locationTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+
+  locationButtonsRow: {
+    flexDirection: "row",
+    marginBottom: 20,
+  },
+
+  locationBtnText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+
+  locationInfoText: {
+    fontSize: 13,
+    color: "#555",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+
+  cameraTile: {
+    width: 100,
+    height: 100,
+    backgroundColor: "#eee",
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+    alignSelf: "center",
+  },
+
+  galleryImage: {
+    width: width / 3 - 10,
+    height: width / 3 - 10,
+    margin: 5,
+    borderRadius: 8,
+  },
+
+  closeGalleryBtn: {
+    marginTop: 30,
+    backgroundColor: "black",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
 });

@@ -6,6 +6,10 @@ import pkg from "pg";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
@@ -19,6 +23,30 @@ const io = new Server(server, {
 
 app.use(cors());
 app.use(express.json());
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const uploadDir = path.join(__dirname, "..", "uploads");
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+app.use("/uploads", express.static(uploadDir));
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const unique =
+      Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, unique + path.extname(file.originalname));
+  },
+});
+
+const upload = multer({ storage });
 
 const JWT_SECRET = process.env.JWT_SECRET || "SUPER_SECRET_KEY";
 
@@ -80,8 +108,26 @@ const initDb = async () => {
       post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
       user_id INTEGER REFERENCES users(id),
       value BOOLEAN NOT NULL,
+      comment TEXT,
+      media_url TEXT,
+      media_type TEXT,
       UNIQUE(post_id, user_id)
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE votes
+    ADD COLUMN IF NOT EXISTS comment TEXT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE votes
+    ADD COLUMN IF NOT EXISTS media_url TEXT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE votes
+    ADD COLUMN IF NOT EXISTS media_type TEXT;
   `);
 
   console.log("✅ DB initialized");
@@ -213,19 +259,43 @@ app.post("/posts", authMiddleware, async (req, res) => {
   res.json(result.rows[0]);
 });
 
-app.post("/vote", authMiddleware, async (req, res) => {
-  const { post_id, value } = req.body;
+app.post(
+  "/vote",
+  authMiddleware,
+  upload.single("media"),
+  async (req, res) => {
+    const { post_id, value, comment } = req.body;
 
-  await pool.query(
-    `INSERT INTO votes (post_id,user_id,value)
-     VALUES ($1,$2,$3)
-     ON CONFLICT (post_id,user_id)
-     DO UPDATE SET value=$3`,
-    [post_id, req.user.id, value]
-  );
+    let media_url = null;
+    let media_type = null;
 
-  res.json({ success: true });
-});
+    if (req.file) {
+      media_url = `/uploads/${req.file.filename}`;
+      media_type = req.file.mimetype;
+    }
+
+    await pool.query(
+      `INSERT INTO votes (post_id,user_id,value,comment,media_url,media_type)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (post_id,user_id)
+       DO UPDATE SET 
+         value=$3,
+         comment=$4,
+         media_url=$5,
+         media_type=$6`,
+      [
+        post_id,
+        req.user.id,
+        value === "true" || value === true,
+        comment || null,
+        media_url,
+        media_type,
+      ]
+    );
+
+    res.json({ success: true, media_url });
+  }
+);
 
 /* ========================= */
 
