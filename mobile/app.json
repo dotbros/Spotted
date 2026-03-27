@@ -4,10 +4,15 @@
     "slug": "spotted",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/logotype.jpg",
     "platforms": ["android"],
     "android": {
       "package": "com.spotted.app",
-      "permissions": ["ACCESS_FINE_LOCATION"]
+      "permissions": ["ACCESS_FINE_LOCATION"],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logotype.jpg",
+        "backgroundColor": "#000000"
+      }
     }
   }
 }
