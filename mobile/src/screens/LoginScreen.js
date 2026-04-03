@@ -10,21 +10,14 @@ import {
 import { AuthContext } from "../context/AuthContext";
 
 export default function LoginScreen({ navigation }) {
-  const { login, register } = useContext(AuthContext);
+  const { login } = useContext(AuthContext);
 
-  const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [nickname, setNickname] = useState("");
 
   const handleSubmit = async () => {
     try {
-      if (isRegister) {
-        await register(email, password, nickname);
-      } else {
-        await login(email, password);
-      }
-
+      await login(identifier, password);
       navigation.goBack();
     } catch (err) {
       Alert.alert("Błąd", err.message);
@@ -33,25 +26,13 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>
-        {isRegister ? "Rejestracja" : "Logowanie"}
-      </Text>
-
-      {isRegister && (
-        <TextInput
-          placeholder="Nick"
-          placeholderTextColor="#999"
-          value={nickname}
-          onChangeText={setNickname}
-          style={styles.input}
-        />
-      )}
+      <Text style={styles.title}>Logowanie</Text>
 
       <TextInput
-        placeholder="Email"
+        placeholder="E-mail lub numer telefonu"
         placeholderTextColor="#999"
-        value={email}
-        onChangeText={setEmail}
+        value={identifier}
+        onChangeText={setIdentifier}
         autoCapitalize="none"
         style={styles.input}
       />
@@ -65,25 +46,19 @@ export default function LoginScreen({ navigation }) {
         style={styles.input}
       />
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleSubmit}
-      >
-        <Text style={styles.buttonText}>
-          {isRegister ? "Zarejestruj" : "Zaloguj"}
-        </Text>
+      <TouchableOpacity style={styles.button} onPress={handleSubmit}>
+        <Text style={styles.buttonText}>Zaloguj się</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         onPress={() =>
-          setIsRegister((prev) => !prev)
+          Alert.alert(
+            "Przypomnienie hasła",
+            "Skontaktuj się z administratorem, aby zresetować hasło."
+          )
         }
       >
-        <Text style={styles.switchText}>
-          {isRegister
-            ? "Masz konto? Zaloguj się"
-            : "Nie masz konta? Zarejestruj się"}
-        </Text>
+        <Text style={styles.forgotText}>Nie pamiętasz hasła?</Text>
       </TouchableOpacity>
     </View>
   );
@@ -92,7 +67,7 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111",
+    backgroundColor: "transparent",
     justifyContent: "center",
     padding: 20,
   },
@@ -114,7 +89,7 @@ const styles = StyleSheet.create({
   },
 
   button: {
-    backgroundColor: "#c00",
+    backgroundColor: "#064e3b",
     padding: 15,
     borderRadius: 8,
     alignItems: "center",
@@ -126,8 +101,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
-  switchText: {
-    color: "#ccc",
+  forgotText: {
+    color: "#7da7ff",
     textAlign: "center",
+    marginTop: 4,
   },
 });

@@ -27,6 +27,11 @@ mobile/android/local.properties
 backend/.env
 
 # =========================
+# RUNTIME UPLOADS
+# =========================
+backend/uploads/
+
+# =========================
 # OS
 # =========================
 .DS_Store
