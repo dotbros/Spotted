@@ -1,6 +1,6 @@
 /**
  * Konfiguracja środowiska
- * Android Emulator → 10.0.2.2 = localhost komputera
+ * Produkcyjny backend (HTTPS)
  */
 
-export const API_URL = "http://10.0.2.2:4000";
+export const API_URL = "https://spotted.teyo.pl";

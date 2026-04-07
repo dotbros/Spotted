@@ -1,9 +1,8 @@
 import React, { createContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_URL } from "../../config";
 
 export const AuthContext = createContext();
-
-const API_URL = "http://10.0.2.2:4000";
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
