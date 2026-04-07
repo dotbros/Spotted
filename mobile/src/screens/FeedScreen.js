@@ -834,6 +834,14 @@ export default function FeedScreen({ navigation }) {
       return;
     }
 
+    if (Number(user?.points || 0) < 200) {
+      Alert.alert(
+        "Za mało punktów",
+        "Aparat odblokowuje się od 200 punktów reputacji."
+      );
+      return;
+    }
+
     setModalVisible(true);
   };
 
@@ -1139,6 +1147,7 @@ export default function FeedScreen({ navigation }) {
     (currentPost.evaluation_deadline && new Date(currentPost.evaluation_deadline) <= new Date())
   );
   const isAnonymousUser = !user;
+  const canUseCamera = !!user && Number(user?.points || 0) >= 200;
   const isAnonVoteLockedOnCurrentPost =
     isAnonymousUser && !!currentPost?.anon_voted;
   const isOwnCurrentPost =
@@ -1727,7 +1736,7 @@ export default function FeedScreen({ navigation }) {
             )}
           </View>
 
-          {!isAnonymousUser && (
+          {canUseCamera && (
             <TouchableOpacity
               style={styles.cameraBtn}
               onPress={openCamera}
