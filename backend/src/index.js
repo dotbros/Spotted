@@ -1111,6 +1111,7 @@ app.post("/auth/register", async (req, res) => {
     );
 
     await recalculateProfilePoints(result.rows[0].id);
+    await refreshUserReputation(result.rows[0].id);
     await createNotificationIfNotExists(
       result.rows[0].id,
       "WELCOME",
@@ -1118,12 +1119,18 @@ app.post("/auth/register", async (req, res) => {
       NOTIFICATION_MESSAGES.WELCOME
     );
 
+    const freshUserResult = await pool.query(
+      `SELECT id,email,phone,nickname,pseudonym,first_name,last_name,points,rank,rank_weight
+       FROM users WHERE id=$1 LIMIT 1`,
+      [result.rows[0].id]
+    );
+
     const token = jwt.sign(
       { id: result.rows[0].id },
       JWT_SECRET
     );
 
-    res.json({ user: result.rows[0], token });
+    res.json({ user: freshUserResult.rows[0] || result.rows[0], token });
   } catch (err) {
     res.status(400).json({
       error: "Nie udało się utworzyć konta",
@@ -1377,15 +1384,26 @@ app.post("/auth/login", async (req, res) => {
 
   await refreshUserReputation(user.id);
 
+  const freshUserResult = await pool.query(
+    `SELECT id,email,phone,nickname,pseudonym,first_name,last_name,points,rank,rank_weight
+     FROM users WHERE id=$1 LIMIT 1`,
+    [user.id]
+  );
+
+  const freshUser = freshUserResult.rows[0] || user;
+
   res.json({
     user: {
-      id: user.id,
-      email: user.email,
-      phone: user.phone,
-      nickname: user.nickname,
-      pseudonym: user.pseudonym,
-      first_name: user.first_name,
-      last_name: user.last_name,
+      id: freshUser.id,
+      email: freshUser.email,
+      phone: freshUser.phone,
+      nickname: freshUser.nickname,
+      pseudonym: freshUser.pseudonym,
+      first_name: freshUser.first_name,
+      last_name: freshUser.last_name,
+      points: Number(freshUser.points || 0),
+      rank: freshUser.rank || "NOWY",
+      rank_weight: Number(freshUser.rank_weight || 1),
     },
     token,
   });
